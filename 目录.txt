@@ -1,0 +1,33 @@
+HuiWork
+├── data                   # 数据文件夹
+│   ├── stock             # 股票数据
+│   │   ├── raw           # 原始数据
+│   │   └── processed     # 处理后的数据
+│   ├── futures           # 期货数据
+│   │   ├── raw           # 原始数据
+│   │   └── processed     # 处理后的数据
+│   └── external_sources  # 其他数据源（如宏观经济、行业指标）
+│
+├── scripts                # 脚本文件夹
+│   ├── data_handling     # 数据处理脚本
+│   ├── backtesting       # 回测相关脚本
+│   ├── trading_strategies # 策略脚本
+│   └── execution         # 交易执行脚本
+│
+├── models                 # 模型文件夹，用于存储训练好的模型和参数
+│   ├── machine_learning  # 机器学习模型
+│   ├── statistical       # 统计模型
+│   └── others            # 其他类型模型
+│
+├── logs                   # 日志文件夹
+│   ├── backtesting       # 回测日志
+│   ├── execution         # 交易执行日志
+│   └── errors            # 错误日志
+│
+├── results                # 结果文件夹，用于存储回测结果、交易结果等
+│   ├── backtesting       # 回测结果
+│   └── performance       # 策略表现结果
+│
+└── config                 # 配置文件夹，用于存放框架配置、API密钥等
+    ├── settings.yml      # 全局设置
+    └── api_keys.yml      # API密钥
