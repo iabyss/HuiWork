@@ -1,4 +1,8 @@
 import pandas as pd
+import talib
+import numpy as np
+
+from math_tools import Main as mt # 导入KDJ选股策略
 
 class KDJSelectionStrategy:
     def __init__(self, p1=9, p2=3, p3=3, isShowLog=False):
@@ -8,6 +12,7 @@ class KDJSelectionStrategy:
         self.isShowLog = isShowLog
 
     def calculate_kdj(self, df, target_date):
+        
         df = df.copy()  # 防止修改原始数据
         df = df.sort_index()  # 确保按日期排序
         
@@ -16,6 +21,7 @@ class KDJSelectionStrategy:
             raise ValueError(f"数据不足，计算KDJ需要至少 {self.p1} 天的历史数据。")
 
         # 计算最低价和最高价的滚动窗口
+
         low_min = df['low'].rolling(window=self.p1, min_periods=1).min()
         high_max = df['high'].rolling(window=self.p1, min_periods=1).max()
         
@@ -23,26 +29,44 @@ class KDJSelectionStrategy:
 
         # 计算 RSV
         df['rsv'] = (df['close'] - low_min) / (high_max - low_min) * 100
-        
-        print(low_min,high_max,df['rsv'])
+        df['rsv'] = df['rsv'].round(3)
 
-        # 初始化K和D
-        df['k'] = 50.0
-        df['d'] = 50.0
 
-        # 使用平滑公式计算 K 和 D
-        for i in range(self.p2 - 1, len(df)):  # 从self.p2-1开始，以保证前面有足够的数值进行SMA计算
-            # 计算新的K值，使用P2日SMA
-            df.loc[df.index[i], 'k'] = df.loc[df.index[i], 'rsv'].mean()
+        # print(df['rsv'])
+
+        df['k'] = mt.custom_sma(df['rsv'], 3,1)
+        df['k'] = df['k'].round(3)
+        df['d'] = mt.custom_sma(df['k'], 3,1)
         
-            # 计算新的D值，使用P3日SMA
-            df.loc[df.index[i], 'd'] = df.loc[df.index[i - self.p3 + 1:i + 1], 'k'].mean()
+
+        # 计算 K, D
+        # df['k'], df['d'] = talib.STOCH(
+        #     df['high'], df['low'], df['close'],
+        #     fastk_period=self.p1,  # RSV 周期
+        #     slowk_period=self.p2, slowk_matype=0,  # K 平滑周期
+        #     slowd_period=self.p3, slowd_matype=0   # D 平滑周期
+        # )
+        # print(df['k']);
+        # 计算 J
+        df['j'] = 3 * df['k'] - 2 * df['d']
         
-            # 计算新的J值
-            df.loc[df.index[i], 'j'] = 3 * df.loc[df.index[i], 'k'] - 2 * df.loc[df.index[i], 'd']
-            if self.isShowLog:
-            # 打印对应日期的RSV, K, D, J值
-                print(f"日期: {df.index[i]},LL: {df.loc[df.index[i], 'low']:.2f},HH: {df.loc[df.index[i], 'high']:.2f}, RSV: {df.loc[df.index[i], 'rsv']:.2f}, K: {df.loc[df.index[i], 'k']:.2f}, D: {df.loc[df.index[i], 'd']:.2f}, J: {df.loc[df.index[i], 'j']:.2f}")
+        # print("K:",  df['rsv'])
+        # print("D:", d)
+        # print("J:", j)
+        # # 使用平滑公式计算 K 和 D
+        # for i in range(self.p2 - 1, len(df)):  # 从self.p2-1开始，以保证前面有足够的数值进行SMA计算
+        #     # 加权 K 值
+        #     df.loc[df.index[i], 'k'] = (1 / self.p2) * df.loc[df.index[i], 'rsv'] + \
+        #                                ((self.p2 - 1) / self.p2) * df.loc[df.index[i - 1], 'k']
+        #     # 加权 D 值
+        #     df.loc[df.index[i], 'd'] = (1 / self.p3) * df.loc[df.index[i], 'k'] + \
+        #                                ((self.p3 - 1) / self.p3) * df.loc[df.index[i - 1], 'd']
+        
+        #     # 计算新的J值
+        #     df.loc[df.index[i], 'j'] = 3 * df.loc[df.index[i], 'k'] - 2 * df.loc[df.index[i], 'd']
+        #     if self.isShowLog:
+        #     # 打印对应日期的RSV, K, D, J值
+        #         print(f"日期: {df.index[i]},LL: {df.loc[df.index[i], 'low']:.2f},HH: {df.loc[df.index[i], 'high']:.2f}, RSV: {df.loc[df.index[i], 'rsv']:.2f}, K: {df.loc[df.index[i], 'k']:.2f}, D: {df.loc[df.index[i], 'd']:.2f}, J: {df.loc[df.index[i], 'j']:.2f}")
                
 
         # 提取目标日期的KDJ值
@@ -65,6 +89,51 @@ class KDJSelectionStrategy:
             print(f"目标日期 {target_date} 的数据 - Close: {close:.2f}, High: {high:.2f}, Low: {low:.2f}, K值: {k_value:.2f}, D值: {d_value:.2f}, J值: {j_value:.2f}")
 
         return k_value, d_value, j_value
+ 
+    def is_kdj_buy(self, df, target_date, j_less, isShowLog=False):
+        """
+        判断前一个交易日的 KDJ 是否小于 X。
+
+        :param df: 包含股票数据的 DataFrame
+        :param target_date: 目标日期
+        :param x: 阈值
+        :return: 布尔值，表示是否符合条件
+        """
+
+        
+        pd.to_datetime(target_date)  # 确保日期列是 datetime 类型
+        target_date_only = target_date.date()
+        # 将 df.index 的时间部分去除，只保留日期部分
+        # df.index = df.index.date
+        # print('当天target_date_only')
+        # print(target_date_only)
+        # print('df数据')  
+        # print(df)  
+
+        if target_date_only not in df.index.date:
+            # raise ValueError(f"目标日期 {target_date} 不在数据中。")
+            print('111')
+            return False
+
+        # 找到前一个交易日
+        target_idx = df.index.get_loc(target_date)
+        if target_idx == 0:
+            raise ValueError("目标日期是数据中的第一个日期，没有前一个交易日。")
+        # print('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
+        
+        prev_date = df.index[target_idx - 1]
+        k, d, j = self.calculate_kdj(df, prev_date)  # 计算前一个交易日的 KDJ 值
+        # print(j)
+        # print('~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~')
+        # k_value = df.loc[prev_date, 'k']
+        # d_value = df.loc[prev_date, 'd']
+        # j_value = df.loc[prev_date, 'j']
+
+        # print(f"前一个交易日 {prev_date} 的数据 - K值: {k_value:.2f}, D值: {d_value:.2f}, J值: {j_value:.2f}")
+        return_bool = j < j_less
+        # return_bool = True
+        return return_bool
+
 
 # 创建包含日期、高、低、收盘价格的数据
 data = {
@@ -93,12 +162,17 @@ data = {
     ]
 }
 
-# 创建 DataFrame 并设置日期为索引
-df = pd.DataFrame(data)
-df['date'] = pd.to_datetime(df['date'])
-df.set_index('date', inplace=True)
 
-strategy = KDJSelectionStrategy(isShowLog=True)
-target_date = '2024-11-01'
-k, d, j = strategy.calculate_kdj(df, target_date)
-print(f"{target_date} 的 KDJ 值为: K={k:.2f}, D={d:.2f}, J={j:.2f}")
+
+
+# # 创建 DataFrame 并设置日期为索引
+# df = pd.DataFrame(data)
+# df['date'] = pd.to_datetime(df['date'])
+# df.set_index('date', inplace=True)
+
+# strategy = KDJSelectionStrategy(isShowLog=True)
+# target_date = '2024-11-01'
+
+# strategy.is_kdj_buy(data,target_date,0,True)
+# k, d, j = strategy.calculate_kdj(df, target_date)
+# print(f"{target_date} 的 KDJ 值为: K={k:.2f}, D={d:.2f}, J={j:.2f}")
